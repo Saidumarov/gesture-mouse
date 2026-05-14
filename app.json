@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Gesture Mouse",
+    "slug": "gesture-mouse",
+    "version": "1.0.0",
+    "owner": "jafarbek",
+    "orientation": "portrait",
+    "scheme": "gesturemouse",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "bundleIdentifier": "com.gesturemouse.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Hand gesture tracking requires camera access",
+        "NSMicrophoneUsageDescription": "VisionCamera requires microphone permission"
+      }
+    },
+    "android": {
+      "package": "com.gesturemouse.app",
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
+    },
+    "plugins": [
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "Hand gesture tracking requires camera access",
+          "enableFrameProcessors": true
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1",
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      "./plugins/withHandLandmarkerModel"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "60312aa1-2d1e-4081-8f4f-66216c776e0f"
+      }
+    }
+  }
+}

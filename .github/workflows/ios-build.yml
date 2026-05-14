@@ -1,0 +1,90 @@
+name: iOS Build (Unsigned IPA)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:        # "Run workflow" tugmasi — qo'lda ishga tushirish
+
+jobs:
+  build-ios:
+    runs-on: macos-15       # Apple Silicon Mac, Xcode 16 bilan
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        id: pods-cache
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: pods-${{ hashFiles('ios/Podfile') }}
+          restore-keys: pods-
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          CONFIGURATION=Release pod install --repo-update
+
+      - name: Inspect Hermes setup
+        run: |
+          echo "=== ios/Pods/hermes-engine ==="
+          ls ios/Pods/hermes-engine/ 2>/dev/null | head -30
+          echo ""
+          echo "=== hermes-engine .sh scripts ==="
+          find ios/Pods/hermes-engine -name "*.sh" 2>/dev/null | while read f; do
+            echo "--- $f ---"
+            cat "$f"
+            echo ""
+          done
+          echo "=== hermes cache in ~/Library ==="
+          find ~/Library/Caches -name "*hermes*" -maxdepth 5 2>/dev/null | head -20
+
+      - name: Build unsigned IPA
+        run: |
+          set -o pipefail
+          # Stream all output so script errors are visible; strip only pure noise
+          xcodebuild \
+            -workspace ios/gesturemouse.xcworkspace \
+            -scheme gesturemouse \
+            -sdk iphoneos \
+            -configuration Release \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS=arm64 \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build" \
+            NODE_BINARY="$(which node)" \
+            REACT_NATIVE_PATH="$(node --print "require.resolve('react-native/package.json').replace('/package.json','')")" \
+            build 2>&1 \
+            | grep -v "^note: Disabling previews" \
+            | grep -v "^warning: Run script build phase 'Create Symlinks"
+          echo "✅ Build succeeded"
+
+      - name: Package .app → .ipa
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -r "$RUNNER_TEMP/build/gesturemouse.app" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qr "gesture-mouse.ipa" Payload/
+          echo "✅ IPA: $(du -sh gesture-mouse.ipa | cut -f1)"
+
+      - name: Upload IPA as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gesture-mouse-ipa
+          path: ${{ runner.temp }}/gesture-mouse.ipa
+          retention-days: 14   # 14 kun saqlanadi, keyin o'chadi
