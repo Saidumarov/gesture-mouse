@@ -10,10 +10,7 @@ import { GestureState, GestureType, HandLandmarkIndex } from '../types/gesture';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-// Initialized once at module load — correct VisionCamera v4 pattern
 const handPlugin = VisionCameraProxy.initFrameProcessorPlugin('detectHands', {});
-
-// ---------- worklet helpers (must be top-level for worklet compiler) ----------
 
 function dist2D(a: number[], b: number[]): number {
   'worklet';
@@ -31,23 +28,18 @@ function classifyGesture(lm: number[][]): GestureType {
   const pinkyTip  = lm[HandLandmarkIndex.PINKY_TIP];
   const wrist     = lm[HandLandmarkIndex.WRIST];
 
-  // Pinch: thumb ↔ index < 6% of frame width
   if (dist2D(thumbTip, indexTip) < 0.06) return 'pinch';
 
-  // Fist: average fingertip-to-wrist distance < 12%
-  const tips = [indexTip, middleTip, ringTip, pinkyTip];
   const avgDist =
-    (dist2D(tips[0], wrist) +
-      dist2D(tips[1], wrist) +
-      dist2D(tips[2], wrist) +
-      dist2D(tips[3], wrist)) /
+    (dist2D(indexTip, wrist) +
+      dist2D(middleTip, wrist) +
+      dist2D(ringTip, wrist) +
+      dist2D(pinkyTip, wrist)) /
     4;
   if (avgDist < 0.12) return 'fist';
 
   return 'pointing';
 }
-
-// ---------- public interface ----------
 
 export interface HandTrackingResult {
   cursorX: SharedValue<number>;
@@ -63,52 +55,62 @@ export function useHandTracking(
   const cursorY    = useSharedValue(SCREEN_H / 2);
   const isDetected = useSharedValue(false);
 
-  // Stable callback ref — avoids stale closure in worklet → JS bridge
   const callbackRef = useRef(onGestureChange);
   callbackRef.current = onGestureChange;
 
-  const notifyJS = useCallback((state: GestureState) => {
-    callbackRef.current?.(state);
-  }, []);
+  // All Reanimated SharedValue writes happen here — on the JS thread (safe!)
+  const updateOnJS = useCallback((
+    x: number,
+    y: number,
+    detected: boolean,
+    gesture: string,
+    pinchDist: number,
+  ) => {
+    cursorX.value = x;
+    cursorY.value = y;
+    isDetected.value = detected;
+
+    if (detected && callbackRef.current) {
+      callbackRef.current({
+        gesture: gesture as GestureType,
+        cursorX: x,
+        cursorY: y,
+        pinchDistance: pinchDist > 0 ? pinchDist : undefined,
+      });
+    }
+  }, [cursorX, cursorY, isDetected]);
 
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
 
-    if (handPlugin == null) return;
+    if (handPlugin == null) {
+      runOnJS(updateOnJS)(SCREEN_W / 2, SCREEN_H / 2, false, 'none', 0);
+      return;
+    }
 
-    const raw = handPlugin.call(frame) as {
+    const raw = handPlugin.call(frame) as unknown as {
       detected: boolean;
       landmarks?: number[][];
     } | null;
 
     if (!raw?.detected || !raw.landmarks) {
-      isDetected.value = false;
+      runOnJS(updateOnJS)(SCREEN_W / 2, SCREEN_H / 2, false, 'none', 0);
       return;
     }
 
-    isDetected.value = true;
     const lm = raw.landmarks;
-
-    // Mirror X for front (selfie) camera
     const tipX = 1 - lm[HandLandmarkIndex.INDEX_FINGER_TIP][0];
     const tipY = lm[HandLandmarkIndex.INDEX_FINGER_TIP][1];
-
-    cursorX.value = tipX * SCREEN_W;
-    cursorY.value = tipY * SCREEN_H;
+    const x = tipX * SCREEN_W;
+    const y = tipY * SCREEN_H;
 
     const gesture = classifyGesture(lm);
-    const pinchDistance =
-      gesture === 'pinch'
-        ? dist2D(lm[HandLandmarkIndex.THUMB_TIP], lm[HandLandmarkIndex.INDEX_FINGER_TIP])
-        : undefined;
+    const pinchDist = gesture === 'pinch'
+      ? dist2D(lm[HandLandmarkIndex.THUMB_TIP], lm[HandLandmarkIndex.INDEX_FINGER_TIP])
+      : 0;
 
-    runOnJS(notifyJS)({
-      gesture,
-      cursorX: tipX * SCREEN_W,
-      cursorY: tipY * SCREEN_H,
-      pinchDistance,
-    });
-  }, [notifyJS]);
+    runOnJS(updateOnJS)(x, y, true, gesture, pinchDist);
+  }, [updateOnJS]);
 
   return { cursorX, cursorY, isDetected, frameProcessor };
 }
