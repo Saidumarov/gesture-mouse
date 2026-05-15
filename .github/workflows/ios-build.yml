@@ -40,19 +40,19 @@ jobs:
 
       - name: Build unsigned IPA
         run: |
+          DERIVED="$RUNNER_TEMP/DerivedData"
           xcodebuild \
             -workspace ios/gesturemouse.xcworkspace \
             -scheme gesturemouse \
             -sdk iphoneos \
             -configuration Release \
-            -parallelizeTargets NO \
+            -derivedDataPath "$DERIVED" \
             ONLY_ACTIVE_ARCH=NO \
             ARCHS=arm64 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ENABLE_BITCODE=NO \
-            CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build" \
             NODE_BINARY="$(which node)" \
             REACT_NATIVE_PATH="$(node --print "require.resolve('react-native/package.json').replace('/package.json','')")" \
             build 2>&1 | tee /tmp/xcodebuild.log; \
@@ -60,7 +60,8 @@ jobs:
           if [ $BUILD_STATUS -ne 0 ]; then \
             echo ""; \
             echo "========== ❌ BUILD ERRORS =========="; \
-            grep -E "^.*(error:|BUILD FAILED).*$" /tmp/xcodebuild.log | grep -v "^note:" | head -80; \
+            grep -E "error:" /tmp/xcodebuild.log | grep -v "^note:" | head -80; \
+            echo "** BUILD FAILED **"; \
             echo "====================================="; \
             exit $BUILD_STATUS; \
           fi
@@ -68,8 +69,11 @@ jobs:
 
       - name: Package .app → .ipa
         run: |
+          DERIVED="$RUNNER_TEMP/DerivedData"
+          APP=$(find "$DERIVED" -name "gesturemouse.app" -path "*/Release-iphoneos/*" | head -1)
+          echo "Found .app: $APP"
           mkdir -p "$RUNNER_TEMP/Payload"
-          cp -r "$RUNNER_TEMP/build/gesturemouse.app" "$RUNNER_TEMP/Payload/"
+          cp -r "$APP" "$RUNNER_TEMP/Payload/"
           cd "$RUNNER_TEMP"
           zip -qr "gesture-mouse.ipa" Payload/
           echo "✅ IPA: $(du -sh gesture-mouse.ipa | cut -f1)"
