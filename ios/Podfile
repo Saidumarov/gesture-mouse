@@ -41,6 +41,15 @@ target 'gesturemouse' do
       target.build_configurations.each do |config|
         config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+
+        # Fix: folly/coro/Coroutine.h not found with react-native-reanimated
+        defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS']
+        if defs.is_a?(Array)
+          defs << 'FOLLY_CFG_NO_COROUTINES=1' unless defs.include?('FOLLY_CFG_NO_COROUTINES=1')
+        else
+          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = [(defs || '$(inherited)'), 'FOLLY_CFG_NO_COROUTINES=1']
+        end
+
         hs = config.build_settings['HEADER_SEARCH_PATHS']
         if hs.is_a?(Array)
           config.build_settings['HEADER_SEARCH_PATHS'] = hs + [
