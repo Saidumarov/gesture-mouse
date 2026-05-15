@@ -45,6 +45,7 @@ export interface HandTrackingResult {
   cursorX: SharedValue<number>;
   cursorY: SharedValue<number>;
   isDetected: SharedValue<boolean>;
+  gesture: SharedValue<string>;
   frameProcessor: ReadonlyFrameProcessor;
 }
 
@@ -54,31 +55,32 @@ export function useHandTracking(
   const cursorX    = useSharedValue(SCREEN_W / 2);
   const cursorY    = useSharedValue(SCREEN_H / 2);
   const isDetected = useSharedValue(false);
+  const gesture    = useSharedValue<string>('none');
 
   const callbackRef = useRef(onGestureChange);
   callbackRef.current = onGestureChange;
 
-  // All Reanimated SharedValue writes happen here — on the JS thread (safe!)
   const updateOnJS = useCallback((
     x: number,
     y: number,
     detected: boolean,
-    gesture: string,
+    gestureStr: string,
     pinchDist: number,
   ) => {
     cursorX.value = x;
     cursorY.value = y;
     isDetected.value = detected;
+    gesture.value = gestureStr;
 
     if (detected && callbackRef.current) {
       callbackRef.current({
-        gesture: gesture as GestureType,
+        gesture: gestureStr as GestureType,
         cursorX: x,
         cursorY: y,
         pinchDistance: pinchDist > 0 ? pinchDist : undefined,
       });
     }
-  }, [cursorX, cursorY, isDetected]);
+  }, [cursorX, cursorY, isDetected, gesture]);
 
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
@@ -112,5 +114,5 @@ export function useHandTracking(
     runOnJS(updateOnJS)(x, y, true, gesture, pinchDist);
   }, [updateOnJS]);
 
-  return { cursorX, cursorY, isDetected, frameProcessor };
+  return { cursorX, cursorY, isDetected, gesture, frameProcessor };
 }

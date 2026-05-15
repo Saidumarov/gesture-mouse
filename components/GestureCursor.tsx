@@ -3,16 +3,13 @@ import { StyleSheet } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   withSpring,
-  useDerivedValue,
   type SharedValue,
 } from 'react-native-reanimated';
-import { GestureType } from '../types/gesture';
 
 const CURSOR_SIZE = 28;
 const SPRING_CONFIG = { damping: 18, stiffness: 200, mass: 0.6 };
 
-// Color per gesture
-const GESTURE_COLORS: Record<GestureType, string> = {
+const GESTURE_COLORS: Record<string, string> = {
   none:     '#FFFFFF40',
   pointing: '#00E5FF',
   fist:     '#FF4081',
@@ -24,34 +21,29 @@ interface Props {
   cursorX: SharedValue<number>;
   cursorY: SharedValue<number>;
   isDetected: SharedValue<boolean>;
-  gesture: GestureType;
+  gesture: SharedValue<string>;
 }
 
 export function GestureCursor({ cursorX, cursorY, isDetected, gesture }: Props) {
-  const color = GESTURE_COLORS[gesture] ?? GESTURE_COLORS.none;
-
-  // Smooth movement with spring
-  const smoothX = useDerivedValue(() => withSpring(cursorX.value, SPRING_CONFIG));
-  const smoothY = useDerivedValue(() => withSpring(cursorY.value, SPRING_CONFIG));
-
   const containerStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: smoothX.value - CURSOR_SIZE / 2 },
-      { translateY: smoothY.value - CURSOR_SIZE / 2 },
+      { translateX: withSpring(cursorX.value - CURSOR_SIZE / 2, SPRING_CONFIG) },
+      { translateY: withSpring(cursorY.value - CURSOR_SIZE / 2, SPRING_CONFIG) },
     ],
     opacity: withSpring(isDetected.value ? 1 : 0, SPRING_CONFIG),
+    borderColor: GESTURE_COLORS[gesture.value] ?? GESTURE_COLORS.none,
   }));
 
-  // Inner dot pulses on fist (tap)
   const innerStyle = useAnimatedStyle(() => ({
     transform: [
-      { scale: withSpring(gesture === 'fist' ? 0.4 : 1, SPRING_CONFIG) },
+      { scale: withSpring(gesture.value === 'fist' ? 0.4 : 1, SPRING_CONFIG) },
     ],
+    backgroundColor: GESTURE_COLORS[gesture.value] ?? GESTURE_COLORS.none,
   }));
 
   return (
-    <Animated.View style={[styles.cursor, containerStyle, { borderColor: color }]}>
-      <Animated.View style={[styles.inner, innerStyle, { backgroundColor: color }]} />
+    <Animated.View style={[styles.cursor, containerStyle]}>
+      <Animated.View style={[styles.inner, innerStyle]} />
     </Animated.View>
   );
 }
