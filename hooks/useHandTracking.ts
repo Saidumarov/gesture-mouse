@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { Dimensions } from 'react-native';
-import { useSharedValue, runOnJS, type SharedValue } from 'react-native-reanimated';
+import { runOnJS } from 'react-native-reanimated';
 import {
   useFrameProcessor,
   VisionCameraProxy,
@@ -42,63 +42,40 @@ function classifyGesture(lm: number[][]): GestureType {
 }
 
 export interface HandTrackingResult {
-  cursorX: SharedValue<number>;
-  cursorY: SharedValue<number>;
-  isDetected: SharedValue<boolean>;
-  gesture: SharedValue<string>;
   frameProcessor: ReadonlyFrameProcessor;
 }
 
 export function useHandTracking(
   onGestureChange?: (state: GestureState) => void,
 ): HandTrackingResult {
-  const cursorX    = useSharedValue(SCREEN_W / 2);
-  const cursorY    = useSharedValue(SCREEN_H / 2);
-  const isDetected = useSharedValue(false);
-  const gesture    = useSharedValue<string>('none');
-
   const callbackRef = useRef(onGestureChange);
   callbackRef.current = onGestureChange;
 
-  const updateOnJS = useCallback((
+  const notifyJS = useCallback((
     x: number,
     y: number,
-    detected: boolean,
     gestureStr: string,
     pinchDist: number,
   ) => {
-    cursorX.value = x;
-    cursorY.value = y;
-    isDetected.value = detected;
-    gesture.value = gestureStr;
-
-    if (detected && callbackRef.current) {
-      callbackRef.current({
-        gesture: gestureStr as GestureType,
-        cursorX: x,
-        cursorY: y,
-        pinchDistance: pinchDist > 0 ? pinchDist : undefined,
-      });
-    }
-  }, [cursorX, cursorY, isDetected, gesture]);
+    callbackRef.current?.({
+      gesture: gestureStr as GestureType,
+      cursorX: x,
+      cursorY: y,
+      pinchDistance: pinchDist > 0 ? pinchDist : undefined,
+    });
+  }, []);
 
   const frameProcessor = useFrameProcessor((frame) => {
     'worklet';
 
-    if (handPlugin == null) {
-      runOnJS(updateOnJS)(SCREEN_W / 2, SCREEN_H / 2, false, 'none', 0);
-      return;
-    }
+    if (handPlugin == null) return;
 
     const raw = handPlugin.call(frame) as unknown as {
       detected: boolean;
       landmarks?: number[][];
     } | null;
 
-    if (!raw?.detected || !raw.landmarks) {
-      runOnJS(updateOnJS)(SCREEN_W / 2, SCREEN_H / 2, false, 'none', 0);
-      return;
-    }
+    if (!raw?.detected || !raw.landmarks) return;
 
     const lm = raw.landmarks;
     const tipX = 1 - lm[HandLandmarkIndex.INDEX_FINGER_TIP][0];
@@ -111,8 +88,8 @@ export function useHandTracking(
       ? dist2D(lm[HandLandmarkIndex.THUMB_TIP], lm[HandLandmarkIndex.INDEX_FINGER_TIP])
       : 0;
 
-    runOnJS(updateOnJS)(x, y, true, gesture, pinchDist);
-  }, [updateOnJS]);
+    runOnJS(notifyJS)(x, y, gesture, pinchDist);
+  }, [notifyJS]);
 
-  return { cursorX, cursorY, isDetected, gesture, frameProcessor };
+  return { frameProcessor };
 }
