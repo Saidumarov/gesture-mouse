@@ -45,6 +45,7 @@ jobs:
             -scheme gesturemouse \
             -sdk iphoneos \
             -configuration Release \
+            -parallelizeTargets NO \
             ONLY_ACTIVE_ARCH=NO \
             ARCHS=arm64 \
             CODE_SIGN_IDENTITY="" \
