@@ -1,6 +1,6 @@
-import { useCallback, useRef } from 'react';
+import { useRef } from 'react';
 import { Dimensions } from 'react-native';
-import { runOnJS } from 'react-native-reanimated';
+import { useRunOnJS } from 'react-native-worklets-core';
 import {
   useFrameProcessor,
   VisionCameraProxy,
@@ -51,7 +51,7 @@ export function useHandTracking(
   const callbackRef = useRef(onGestureChange);
   callbackRef.current = onGestureChange;
 
-  const notifyJS = useCallback((
+  const notifyJS = useRunOnJS((
     x: number,
     y: number,
     gestureStr: string,
@@ -88,7 +88,7 @@ export function useHandTracking(
       ? dist2D(lm[HandLandmarkIndex.THUMB_TIP], lm[HandLandmarkIndex.INDEX_FINGER_TIP])
       : 0;
 
-    runOnJS(notifyJS)(x, y, gesture, pinchDist);
+    notifyJS(x, y, gesture, pinchDist);
   }, [notifyJS]);
 
   return { frameProcessor };
